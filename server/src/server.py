@@ -1,14 +1,20 @@
 import pickle
 import secrets
 from socket import *
+from threading import Thread
+from time import sleep, time
 
 from common.src.common import print_hi
 from common.src.packets.Packet import Packet
 from common.src.packets.c2s.HelloPacket import HelloPacket
+from common.src.packets.c2s.PingPacket import PingPacket
 from common.src.packets.c2s.RequestInfoPacket import RequestInfoPacket
 from common.src.packets.s2c.HelloReplyPacket import HelloReplyPacket
 from common.src.packets.s2c.InfoReplyPacket import InfoReplyPacket
 from User import User
+
+SERVER_ADDRESS = ('localhost', 5000)
+PING_TIMEOUT = 5  # timeout clients after not pinging for 5 seconds
 
 
 class Server:
@@ -18,6 +24,8 @@ class Server:
         self.clients = []
         self.socket = socket(AF_INET, SOCK_DGRAM)
         self.socket.bind(address)
+        timeouts_thread = Thread(target=self.manage_timeouts)
+        timeouts_thread.start()
 
     def send_packet(self, packet, addr: tuple):
         data = pickle.dumps(packet)
@@ -31,11 +39,19 @@ class Server:
             return None, None
         return packet, addr
 
+    def manage_timeouts(self):
+        while True:
+            for client in self.clients:
+                if client.last_ping + PING_TIMEOUT < time():
+                    print(f"Client {client.name} timed out.")
+                    self.clients.remove(client)
+            sleep(1)  # todo proper concurrency (asyncio?)
+
 
 if __name__ == '__main__':
     """The main server entry point.
     
-    Currently one server instance means one "game".
+    Currently one server instance means one "game" (one game state, one set of players, one seed/map, etc.).
     """
     print_hi('Server')
 
@@ -59,3 +75,10 @@ if __name__ == '__main__':
             player_count = len(server.clients)
             reply_packet = InfoReplyPacket('Hello World!', player_count, 'lobby')
             server.send_packet(reply_packet, client_addr)
+
+        elif isinstance(client_packet, PingPacket):
+            print(f"Received ping from {client_addr}")
+            for client in server.clients:
+                if client.addr == client_addr:
+                    client.last_ping = time()
+                    break

@@ -1,5 +1,6 @@
 import pickle
 from socket import socket, AF_INET, SOCK_DGRAM
+from time import sleep
 
 from common.src.common import print_hi
 from common.src.packets.Packet import Packet
@@ -12,13 +13,14 @@ class Client:
     def __init__(self, address: tuple):
         self.address = address
         self.socket = socket(AF_INET, SOCK_DGRAM)
+        self.socket.connect(('localhost', 5000))  # connect to server
 
     def send_packet(self, packet: Packet):
         data = pickle.dumps(packet)
         self.socket.sendto(data, self.address)
 
     def rcv(self, bufsize: int):
-        data, addr = self.socket.recvfrom(bufsize)
+        data = self.socket.recv(bufsize)
         packet = pickle.loads(data)
         if not isinstance(packet, Packet):
             print(f"Received invalid packet: {packet}")
@@ -39,5 +41,6 @@ if __name__ == '__main__':
     client.send_packet(request_info_packet)
 
     info_reply = client.rcv(1024)
+
     if isinstance(info_reply, InfoReplyPacket):
         print(f"Received info reply with {info_reply.player_count} players and state {info_reply.state}")
